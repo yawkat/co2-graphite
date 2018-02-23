@@ -95,11 +95,36 @@ def _parse(decrypted: bytes) -> Union[CO2, Temperature, Unknown]:
 def _main():
     import graphitesend
     import sys
-    if len(sys.argv) != 3:
-        print("Usage: %s <file> <sensor id>" % sys.argv[0])
-        sys.exit(-1)
+    import argparse
 
-    graphitesend.init(graphite_server="192.168.1.3", prefix="co2mon." + sys.argv[2], system_name="")
+    parser = argparse.ArgumentParser()
+    parser.add_argument("file")
+    parser.add_argument("--graphite-server")
+    parser.add_argument("--graphite-id", default='0')
+    parser.add_argument("--http-host", default='127.0.0.1')
+    parser.add_argument("--http-port", type=int)
+    args = parser.parse_args()
+
+    graphite = args.graphite_server is not None
+    if graphite:
+        graphitesend.init(graphite_server=args.graphite_server, prefix="co2mon." + args.graphite_id,
+                          system_name="")
+
+    state = {}
+
+    if args.http_port:
+        import flask
+        import threading
+        app = flask.Flask("co2mon")
+
+        @app.route("/")
+        def show_state():
+            return flask.jsonify(state)
+
+        def run():
+            app.run(host=args.http_host, port=args.http_port)
+
+        threading.Thread(target=run, daemon=True).start()
 
     with open(sys.argv[1], "r+b") as dev:
         key = generate_key()
@@ -108,9 +133,13 @@ def _main():
         while True:
             data = read_sensor(dev, key)
             if type(data) == CO2:
-                graphitesend.send("co2", data.ppm())
+                if graphite:
+                    graphitesend.send("co2", data.ppm())
+                state["co2"] = data.ppm()
             elif type(data) == Temperature:
-                graphitesend.send("temperature", data.celsius())
+                if graphite:
+                    graphitesend.send("temperature", data.celsius())
+                state["temperature"] = data.celsius()
 
 
 if __name__ == '__main__':
