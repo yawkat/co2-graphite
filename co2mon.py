@@ -29,7 +29,7 @@ def init_sensor(dev: hidraw.HIDRaw, key: bytes):
 
 
 def read_sensor(dev: BinaryIO, key: bytes):
-    buf: bytes = dev.read(8)
+    buf = dev.read(8)
     return _parse(_decrypt(buf, key))
 
 
